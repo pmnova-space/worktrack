@@ -5,10 +5,6 @@ from werkzeug.utils import secure_filename
 from functools import wraps
 import libsql_client
 import asyncio
-from dotenv import load_dotenv
-
-# ============ LOAD .env ============
-load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'worktrack-secret-key-2026-change-this')
@@ -18,7 +14,7 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 # ============ TURSO CONFIG ============
-TURSO_URL =  os.environ.get('TURSO_URL', '')
+TURSO_URL = os.environ.get('TURSO_URL', '')
 TURSO_TOKEN = os.environ.get('TURSO_TOKEN', '')
 
 # ============ ADMIN CREDENTIALS ============
@@ -27,7 +23,6 @@ ADMIN_PASSWORD = 'Khoth@123'
 
 # ============ DATABASE HELPERS ============
 def run_async(coro):
-    """Helper to run async code from sync context"""
     try:
         loop = asyncio.get_event_loop()
         if loop.is_running():
@@ -39,7 +34,6 @@ def run_async(coro):
         return asyncio.run(coro)
 
 def db_execute(query, params=None):
-    """Execute a query and return results"""
     async def _execute():
         async with libsql_client.create_client(
             url=TURSO_URL,
@@ -51,6 +45,15 @@ def db_execute(query, params=None):
                 result = await client.execute(query)
             return result.rows
     return run_async(_execute())
+
+def to_int(value):
+    """Safe int conversion — string, None, kuch bhi ho"""
+    try:
+        if value is None:
+            return 0
+        return int(value)
+    except (ValueError, TypeError):
+        return 0
 
 # ============ DATABASE INIT ============
 def init_db():
@@ -98,7 +101,7 @@ if TURSO_URL and TURSO_TOKEN:
     except Exception as e:
         print(f"⚠️ Database init error: {e}")
 else:
-    print("⚠️ TURSO_URL और TURSO_TOKEN set नहीं हैं। .env file check करें।")
+    print("⚠️ TURSO_URL और TURSO_TOKEN set नहीं हैं।")
 
 # ============ HELPERS ============
 def get_today():
@@ -150,25 +153,25 @@ def logout():
 # ============ DASHBOARD ============
 @app.route('/')
 def home():
-    total_workers = db_execute("SELECT COUNT(*) FROM workers")[0][0]
+    total_workers = to_int(db_execute("SELECT COUNT(*) FROM workers")[0][0])
 
     today = get_today()
-    present_today = db_execute("SELECT COUNT(*) FROM attendance WHERE date = ? AND status = 'P'", [today])[0][0]
-    absent_today = db_execute("SELECT COUNT(*) FROM attendance WHERE date = ? AND status = 'A'", [today])[0][0]
-    half_today = db_execute("SELECT COUNT(*) FROM attendance WHERE date = ? AND status = 'H'", [today])[0][0]
+    present_today = to_int(db_execute("SELECT COUNT(*) FROM attendance WHERE date = ? AND status = 'P'", [today])[0][0])
+    absent_today = to_int(db_execute("SELECT COUNT(*) FROM attendance WHERE date = ? AND status = 'A'", [today])[0][0])
+    half_today = to_int(db_execute("SELECT COUNT(*) FROM attendance WHERE date = ? AND status = 'H'", [today])[0][0])
 
     month = get_current_month()
-    month_payment_result = db_execute("SELECT COALESCE(SUM(amount), 0) FROM payments WHERE date LIKE ?", [month + '%'])
-    month_payment = month_payment_result[0][0]
+    month_payment = to_int(db_execute("SELECT COALESCE(SUM(amount), 0) FROM payments WHERE date LIKE ?", [month + '%'])[0][0])
 
     workers_data = db_execute("SELECT worker_id, daily_wage FROM workers")
 
     total_due = 0
     for w_id, wage in workers_data:
-        p_days = db_execute("SELECT COUNT(*) FROM attendance WHERE worker_id = ? AND status = 'P'", [w_id])[0][0]
-        h_days = db_execute("SELECT COUNT(*) FROM attendance WHERE worker_id = ? AND status = 'H'", [w_id])[0][0]
+        wage = to_int(wage)
+        p_days = to_int(db_execute("SELECT COUNT(*) FROM attendance WHERE worker_id = ? AND status = 'P'", [w_id])[0][0])
+        h_days = to_int(db_execute("SELECT COUNT(*) FROM attendance WHERE worker_id = ? AND status = 'H'", [w_id])[0][0])
         earned = (p_days * wage) + (h_days * wage // 2)
-        paid = db_execute("SELECT COALESCE(SUM(amount), 0) FROM payments WHERE worker_id = ?", [w_id])[0][0]
+        paid = to_int(db_execute("SELECT COALESCE(SUM(amount), 0) FROM payments WHERE worker_id = ?", [w_id])[0][0])
         total_due += max(0, earned - paid)
 
     return render_template('index.html',
@@ -202,8 +205,7 @@ def add_worker():
             photo_name = secure_filename(photo.filename)
             photo.save(os.path.join(app.config['UPLOAD_FOLDER'], photo_name))
 
-        count_result = db_execute("SELECT COUNT(*) FROM workers")
-        count = count_result[0][0] + 1
+        count = to_int(db_execute("SELECT COUNT(*) FROM workers")[0][0]) + 1
         worker_id = f"W{count:03d}"
 
         db_execute(
@@ -306,11 +308,11 @@ def worker_detail(worker_id):
     if not worker:
         return redirect(url_for('workers'))
 
-    present_days = db_execute("SELECT COUNT(*) FROM attendance WHERE worker_id = ? AND status = 'P'", [worker_id])[0][0]
-    half_days = db_execute("SELECT COUNT(*) FROM attendance WHERE worker_id = ? AND status = 'H'", [worker_id])[0][0]
-    absent_days = db_execute("SELECT COUNT(*) FROM attendance WHERE worker_id = ? AND status = 'A'", [worker_id])[0][0]
+    present_days = to_int(db_execute("SELECT COUNT(*) FROM attendance WHERE worker_id = ? AND status = 'P'", [worker_id])[0][0])
+    half_days = to_int(db_execute("SELECT COUNT(*) FROM attendance WHERE worker_id = ? AND status = 'H'", [worker_id])[0][0])
+    absent_days = to_int(db_execute("SELECT COUNT(*) FROM attendance WHERE worker_id = ? AND status = 'A'", [worker_id])[0][0])
 
-    wage = worker[4]
+    wage = to_int(worker[4])
     earned = (present_days * wage) + (half_days * wage // 2)
 
     all_payments = db_execute(
@@ -318,7 +320,7 @@ def worker_detail(worker_id):
         [worker_id]
     )
 
-    total_paid = db_execute("SELECT COALESCE(SUM(amount), 0) FROM payments WHERE worker_id = ?", [worker_id])[0][0]
+    total_paid = to_int(db_execute("SELECT COALESCE(SUM(amount), 0) FROM payments WHERE worker_id = ?", [worker_id])[0][0])
     due = earned - total_paid
 
     attendance_history = db_execute(
