@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ID Card - {{ worker[2] }} | WorkTrack</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script>
+    <style>
+        .id-card-wrapper {
+            max-width: 420px;
+            margin: 0 auto 24px;
+        }
+
+        #download-id-card {
+            background: white;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+        }
+
+        .id-header {
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            color: white;
+            padding: 24px;
+            text-align: center;
+            position: relative;
+        }
+
+        .id-header .logo-mini {
+            width: 50px;
+            height: 50px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 14px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 10px;
+        }
+
+        .id-header .logo-mini svg {
+            width: 28px;
+            height: 28px;
+        }
+
+        .id-header h3 {
+            font-size: 20px;
+            font-weight: 800;
+            letter-spacing: 1px;
+        }
+
+        .id-header p {
+            font-size: 11px;
+            opacity: 0.9;
+            margin-top: 4px;
+            letter-spacing: 2px;
+        }
+
+        .id-header::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 24px;
+            background: white;
+            border-radius: 24px 24px 0 0;
+        }
+
+        .id-body {
+            padding: 20px 28px 28px;
+            text-align: center;
+            position: relative;
+            z-index: 2;
+            margin-top: -35px;
+        }
+
+        .id-photo {
+            width: 130px;
+            height: 130px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 5px solid white;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+            margin-bottom: 16px;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-size: 52px;
+            font-weight: 700;
+        }
+
+        .id-body h2 {
+            color: #1e293b;
+            font-size: 24px;
+            font-weight: 800;
+            margin-bottom: 6px;
+            letter-spacing: -0.5px;
+        }
+
+        .id-body .worker-id {
+            display: inline-block;
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            color: white;
+            padding: 6px 16px;
+            border-radius: 10px;
+            font-weight: 700;
+            font-size: 14px;
+            letter-spacing: 1px;
+            margin-bottom: 24px;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        }
+
+        .id-details {
+            text-align: left;
+            background: #f8fafc;
+            padding: 18px;
+            border-radius: 14px;
+            margin-top: 16px;
+        }
+
+        .id-details .row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .id-details .row:last-child {
+            border-bottom: none;
+        }
+
+        .id-details .label {
+            color: #64748b;
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .id-details .value {
+            color: #1e293b;
+            font-weight: 700;
+            font-size: 14px;
+        }
+
+        .id-footer {
+            background: #1e293b;
+            color: white;
+            text-align: center;
+            padding: 14px;
+            font-size: 11px;
+            letter-spacing: 1px;
+        }
+
+        .id-footer p {
+            opacity: 0.9;
+        }
+
+        .id-footer .sign {
+            margin-top: 6px;
+            font-size: 10px;
+            opacity: 0.6;
+        }
+
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+            flex-wrap: wrap;
+            margin-bottom: 24px;
+        }
+
+        .btn-download-id {
+            background: linear-gradient(135deg, #10b981, #059669);
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+            transition: all 0.2s;
+        }
+
+        .btn-download-id:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(16, 185, 129, 0.4);
+        }
+
+        .btn-print-id {
+            background: white;
+            color: #6366f1;
+            border: 2px solid #6366f1;
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+        }
+
+        .btn-print-id:hover {
+            background: #6366f1;
+            color: white;
+        }
+
+        @media print {
+            .sidebar, .bottom-nav, .btn-back, .action-buttons, .topbar-actions, .footer {
+                display: none !important;
+            }
+            .main-content {
+                margin-left: 0 !important;
+                padding: 0 !important;
+            }
+            #download-id-card {
+                box-shadow: none;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+
+    <aside class="sidebar">
+        <div class="sidebar-logo">
+            <div class="logo-icon">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M2 20V10L8 13V10L14 13V10L22 14V20H2Z" fill="white"/>
+                    <rect x="4" y="5" width="3" height="5" fill="white"/>
+                    <rect x="10" y="6" width="3" height="4" fill="white"/>
+                </svg>
+            </div>
+            <div>
+                <h1>WorkTrack</h1>
+                <p>Worker Management</p>
+            </div>
+        </div>
+
+        <ul class="nav-menu">
+            <li><a href="/"><span class="icon">🏠</span> Dashboard</a></li>
+            <li><a href="/workers" class="active"><span class="icon">👥</span> Workers</a></li>
+            <li><a href="/add_worker"><span class="icon">➕</span> नया Worker</a></li>
+            <li><a href="/attendance"><span class="icon">📋</span> Attendance</a></li>
+            <li><a href="/payments"><span class="icon">💰</span> Payment</a></li>
+
+            {% if is_admin() %}
+            <li class="nav-divider">
+                <a href="/logout" class="nav-logout">
+                    <span class="icon">🚪</span> Logout
+                </a>
+            </li>
+            {% else %}
+            <li class="nav-divider">
+                <a href="/login" class="nav-login">
+                    <span class="icon">🔐</span> Admin Login
+                </a>
+            </li>
+            {% endif %}
+        </ul>
+    </aside>
+
+    <main class="main-content">
+
+        <a href="/workers" class="btn-back">← Workers पर वापस</a>
+
+        <div class="topbar">
+            <div>
+                <h2>🪪 Worker ID Card</h2>
+                <p class="subtitle">{{ worker[2] }} का पहचान पत्र</p>
+            </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="action-buttons">
+            <button onclick="downloadIDCard()" class="btn-download-id">📥 Download</button>
+            <button onclick="window.print()" class="btn-print-id">🖨️ Print</button>
+        </div>
+
+        <!-- ID Card (यही download होगा) -->
+        <div class="id-card-wrapper">
+            <div id="download-id-card">
+
+                <div class="id-header">
+                    <div class="logo-mini">
+                        <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M2 20V10L8 13V10L14 13V10L22 14V20H2Z" fill="white"/>
+                            <rect x="4" y="5" width="3" height="5" fill="white"/>
+                            <rect x="10" y="6" width="3" height="4" fill="white"/>
+                        </svg>
+                    </div>
+                    <h3>WORKTRACK</h3>
+                    <p>WORKER ID CARD</p>
+                </div>
+
+                <div class="id-body">
+
+                    {% if worker[5] %}
+                    <img src="{{ url_for('static', filename='uploads/' + worker[5]) }}" class="id-photo" alt="{{ worker[2] }}">
+                    {% else %}
+                    <div class="id-photo">{{ worker[2][0]|upper }}</div>
+                    {% endif %}
+
+                    <h2>{{ worker[2] }}</h2>
+                    <div class="worker-id">{{ worker[1] }}</div>
+
+                    <div class="id-details">
+                        <div class="row">
+                            <span class="label">📱 मोबाइल</span>
+                            <span class="value">{{ worker[3] if worker[3] else 'N/A' }}</span>
+                        </div>
+                        <div class="row">
+                            <span class="label">💰 दैनिक मजदूरी</span>
+                            <span class="value">₹{{ worker[4] }}</span>
+                        </div>
+                        <div class="row">
+                            <span class="label">📅 जॉइनिंग</span>
+                            <span class="value">
+                                {% if worker[6] %}
+                                    {{ worker[6] }}
+                                {% else %}
+                                    N/A
+                                {% endif %}
+                            </span>
+                        </div>
+                    </div>
+
+                </div>
+
+                <div class="id-footer">
+                    <p>© 2026 WorkTrack</p>
+                    <p class="sign">Valid Identity Card</p>
+                </div>
+
+            </div>
+        </div>
+
+        <div class="footer" style="margin-top: 30px;">
+            <p>© 2026 WorkTrack | Worker Management System</p>
+        </div>
+
+    </main>
+
+</div>
+
+<nav class="bottom-nav">
+    <a href="/" class="nav-item">
+        <span class="icon">🏠</span>
+        <span>Home</span>
+    </a>
+    <a href="/workers" class="nav-item active">
+        <span class="icon">👥</span>
+        <span>Workers</span>
+    </a>
+    <a href="/attendance" class="nav-item">
+        <span class="icon">📋</span>
+        <span>Attendance</span>
+    </a>
+    <a href="/payments" class="nav-item">
+        <span class="icon">💰</span>
+        <span>Payment</span>
+    </a>
+</nav>
+
+<script>
+    function downloadIDCard() {
+        const card = document.getElementById('download-id-card');
+        const workerName = "{{ worker[2] }}";
+        const workerId = "{{ worker[1] }}";
+
+        html2canvas(card, {
+            scale: 3,
+            backgroundColor: null,
+            useCORS: true
+        }).then(canvas => {
+            const link = document.createElement('a');
+            const fileName = 'ID_Card_' + workerId + '_' + workerName + '.png';
+            link.download = fileName;
+            link.href = canvas.toDataURL('image/png');
+            link.click();
+        }).catch(err => {
+            alert('Download नहीं हो पाया। Print option use करें।');
+            console.error(err);
+        });
+    }
+</script>
+
+</body>
+</html>

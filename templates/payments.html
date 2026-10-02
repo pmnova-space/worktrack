@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment | WorkTrack</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        .payment-form-box {
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            overflow: hidden;
+            margin-bottom: 24px;
+        }
+
+        .payment-form-header {
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            color: white;
+            padding: 20px 24px;
+        }
+
+        .payment-form-header h3 {
+            font-size: 18px;
+            font-weight: 700;
+        }
+
+        .payment-form-body {
+            padding: 24px;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-bottom: 16px;
+        }
+
+        .payment-list {
+            display: grid;
+            gap: 12px;
+        }
+
+        .payment-item {
+            background: white;
+            padding: 16px 20px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            transition: all 0.2s;
+            border-left: 4px solid #10b981;
+        }
+
+        .payment-item:hover {
+            box-shadow: 0 8px 20px rgba(0,0,0,0.08);
+            transform: translateX(4px);
+        }
+
+        .payment-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: 12px;
+            background: rgba(16, 185, 129, 0.1);
+            color: #10b981;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            flex-shrink: 0;
+        }
+
+        .payment-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .payment-info h4 {
+            font-size: 15px;
+            font-weight: 600;
+            color: #1e293b;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .payment-info .badge-id {
+            background: rgba(99, 102, 241, 0.1);
+            color: #6366f1;
+            padding: 2px 8px;
+            border-radius: 6px;
+            font-size: 11px;
+            font-weight: 700;
+        }
+
+        .payment-info p {
+            font-size: 12px;
+            color: #64748b;
+            margin-top: 2px;
+        }
+
+        .payment-amount {
+            text-align: right;
+            flex-shrink: 0;
+        }
+
+        .payment-amount .amount {
+            font-size: 20px;
+            font-weight: 700;
+            color: #10b981;
+        }
+
+        .payment-amount .date {
+            font-size: 11px;
+            color: #64748b;
+            margin-top: 2px;
+        }
+
+        .btn-delete-payment {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            background: rgba(239, 68, 68, 0.1);
+            color: #ef4444;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            transition: all 0.2s;
+        }
+
+        .btn-delete-payment:hover {
+            background: #ef4444;
+            color: white;
+        }
+
+        .view-only-notice {
+            background: rgba(99, 102, 241, 0.08);
+            border-left: 4px solid #6366f1;
+            padding: 14px 20px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            color: #4f46e5;
+            font-weight: 500;
+        }
+
+        @media (max-width: 600px) {
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+
+            .payment-item {
+                flex-wrap: wrap;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+
+    <aside class="sidebar">
+        <div class="sidebar-logo">
+            <div class="logo-icon">
+                <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M2 20V10L8 13V10L14 13V10L22 14V20H2Z" fill="white"/>
+                    <rect x="4" y="5" width="3" height="5" fill="white"/>
+                    <rect x="10" y="6" width="3" height="4" fill="white"/>
+                </svg>
+            </div>
+            <div>
+                <h1>WorkTrack</h1>
+                <p>Worker Management</p>
+            </div>
+        </div>
+
+        <ul class="nav-menu">
+            <li><a href="/"><span class="icon">🏠</span> Dashboard</a></li>
+            <li><a href="/workers"><span class="icon">👥</span> Workers</a></li>
+            <li><a href="/add_worker"><span class="icon">➕</span> नया Worker</a></li>
+            <li><a href="/attendance"><span class="icon">📋</span> Attendance</a></li>
+            <li><a href="/payments" class="active"><span class="icon">💰</span> Payment</a></li>
+
+            {% if is_admin() %}
+            <li class="nav-divider">
+                <a href="/logout" class="nav-logout">
+                    <span class="icon">🚪</span> Logout
+                </a>
+            </li>
+            {% else %}
+            <li class="nav-divider">
+                <a href="/login" class="nav-login">
+                    <span class="icon">🔐</span> Admin Login
+                </a>
+            </li>
+            {% endif %}
+        </ul>
+    </aside>
+
+    <main class="main-content">
+
+        <div class="topbar">
+            <div>
+                <h2>💰 Payments</h2>
+                <p class="subtitle">
+                    {% if is_admin() %}
+                    नया payment दर्ज करें और पुराने देखें
+                    {% else %}
+                    सारे payments देखें (सिर्फ देखने के लिए)
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+
+        {% if not is_admin() %}
+        <div class="view-only-notice">
+            👁️ यह page सिर्फ देखने के लिए है। Payment जोड़ने के लिए Admin login करें।
+        </div>
+        {% endif %}
+
+        {% if is_admin() %}
+        <!-- Payment Add Form -->
+        <div class="payment-form-box">
+            <div class="payment-form-header">
+                <h3>➕ नया Payment जोड़ें</h3>
+            </div>
+
+            <div class="payment-form-body">
+                <form method="POST" action="/add_payment">
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>👤 Worker चुनें *</label>
+                            <select name="worker_id" required>
+                                <option value="">-- चुनें --</option>
+                                {% for w in workers %}
+                                <option value="{{ w[1] }}">{{ w[1] }} - {{ w[2] }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label>💰 रकम (₹) *</label>
+                            <input type="number" name="amount" required placeholder="5000" min="1">
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>📅 तारीख</label>
+                            <input type="date" name="date" value="{{ today_iso }}">
+                        </div>
+
+                        <div class="form-group">
+                            <label>📝 नोट (advance / salary / bonus)</label>
+                            <input type="text" name="note" placeholder="जैसे: advance">
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn-submit">✅ Payment Save करें</button>
+
+                </form>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Payments List -->
+        <h3 class="section-title">📋 सारे Payments</h3>
+
+        {% if payments %}
+        <div class="payment-list">
+            {% for p in payments %}
+            <div class="payment-item">
+
+                <div class="payment-icon">💰</div>
+
+                <div class="payment-info">
+                    <h4>
+                        {{ p[2] if p[2] else 'Unknown' }}
+                        <span class="badge-id">{{ p[1] }}</span>
+                    </h4>
+                    <p>
+                        {% if p[5] %}📝 {{ p[5] }} • {% endif %}
+                        📅 {{ p[4] }}
+                    </p>
+                </div>
+
+                <div class="payment-amount">
+                    <div class="amount">₹{{ p[3] }}</div>
+                </div>
+
+                {% if is_admin() %}
+                <a href="/delete_payment/{{ p[0] }}"
+                   class="btn-delete-payment"
+                   onclick="return confirm('यह payment delete करें?');"
+                   title="Delete">🗑️</a>
+                {% endif %}
+
+            </div>
+            {% endfor %}
+        </div>
+
+        {% else %}
+        <div class="empty-state">
+            <div class="icon">💰</div>
+            <h3>अभी कोई Payment नहीं है</h3>
+            {% if is_admin() %}
+            <p>ऊपर form से पहला payment जोड़ें</p>
+            {% else %}
+            <p>जब admin payment जोड़ेंगे, यहाँ दिखेंगे</p>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <div class="footer">
+            <p>© 2026 WorkTrack | Worker Management System</p>
+        </div>
+
+    </main>
+
+</div>
+
+<nav class="bottom-nav">
+    <a href="/" class="nav-item">
+        <span class="icon">🏠</span>
+        <span>Home</span>
+    </a>
+    <a href="/workers" class="nav-item">
+        <span class="icon">👥</span>
+        <span>Workers</span>
+    </a>
+    <a href="/attendance" class="nav-item">
+        <span class="icon">📋</span>
+        <span>Attendance</span>
+    </a>
+    <a href="/payments" class="nav-item active">
+        <span class="icon">💰</span>
+        <span>Payment</span>
+    </a>
+</nav>
+
+</body>
+</html>
