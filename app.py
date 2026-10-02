@@ -1,10 +1,13 @@
 from flask import Flask, render_template, request, redirect, url_for, session
 import os
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from werkzeug.utils import secure_filename
 from functools import wraps
 import libsql_client
 import asyncio
+
+# ============ INDIA TIMEZONE (IST = UTC + 5:30) ============
+IST = timezone(timedelta(hours=5, minutes=30))
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'worktrack-secret-key-2026-change-this')
@@ -103,15 +106,15 @@ if TURSO_URL and TURSO_TOKEN:
 else:
     print("⚠️ TURSO_URL और TURSO_TOKEN set नहीं हैं।")
 
-# ============ HELPERS ============
+# ============ HELPERS (IST TIMEZONE) ============
 def get_today():
-    return datetime.now().strftime('%Y-%m-%d')
+    return datetime.now(IST).strftime('%Y-%m-%d')
 
 def get_today_display():
-    return datetime.now().strftime('%d %B %Y')
+    return datetime.now(IST).strftime('%d %B %Y')
 
 def get_current_month():
-    return datetime.now().strftime('%Y-%m')
+    return datetime.now(IST).strftime('%Y-%m')
 
 def is_admin():
     return session.get('admin') == True
@@ -197,7 +200,7 @@ def add_worker():
         name = request.form['name']
         phone = request.form['phone']
         daily_wage = request.form['daily_wage']
-        join_date = datetime.now().strftime('%d-%m-%Y')
+        join_date = datetime.now(IST).strftime('%d-%m-%Y')
 
         photo = request.files['photo']
         photo_name = ''
@@ -289,7 +292,7 @@ def add_payment():
 
     db_execute(
         "INSERT INTO payments (worker_id, amount, date, note, created_at) VALUES (?, ?, ?, ?, ?)",
-        [worker_id, amount, date, note, datetime.now().strftime('%Y-%m-%d %H:%M:%S')]
+        [worker_id, amount, date, note, datetime.now(IST).strftime('%Y-%m-%d %H:%M:%S')]
     )
     return redirect(url_for('payments'))
 
