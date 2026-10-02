@@ -340,5 +340,7 @@ def worker_detail(worker_id):
                          attendance_history=attendance_history,
                          today=get_today_display())
 
+# ============ RUN ============
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
