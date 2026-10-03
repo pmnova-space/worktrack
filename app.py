@@ -3,8 +3,9 @@ import os
 from datetime import datetime, timezone, timedelta
 from werkzeug.utils import secure_filename
 from functools import wraps
-import libsql_client
-import asyncio
+
+# ============ LIBSQL (sqlite3 compatible) ============
+import libsql_experimental as libsql
 
 # ============ INDIA TIMEZONE (IST = UTC + 5:30) ============
 IST = timezone(timedelta(hours=5, minutes=30))
@@ -24,89 +25,66 @@ TURSO_TOKEN = os.environ.get('TURSO_TOKEN', '')
 ADMIN_USERNAME = 'khoth'
 ADMIN_PASSWORD = 'Khoth@123'
 
-# ============ DATABASE HELPERS ============
-def run_async(coro):
-    try:
-        loop = asyncio.get_event_loop()
-        if loop.is_running():
-            import nest_asyncio
-            nest_asyncio.apply()
-            return loop.run_until_complete(coro)
-        return loop.run_until_complete(coro)
-    except RuntimeError:
-        return asyncio.run(coro)
-
-def db_execute(query, params=None):
-    async def _execute():
-        async with libsql_client.create_client(
-            url=TURSO_URL,
-            auth_token=TURSO_TOKEN
-        ) as client:
-            if params:
-                result = await client.execute(query, params)
-            else:
-                result = await client.execute(query)
-            return result.rows
-    return run_async(_execute())
-
-def to_int(value):
-    """Safe int conversion — string, None, kuch bhi ho"""
-    try:
-        if value is None:
-            return 0
-        return int(value)
-    except (ValueError, TypeError):
-        return 0
+# ============ DATABASE CONNECTION ============
+def get_db():
+    """Turso से connect करो — हर request पर fresh connection"""
+    if TURSO_URL and TURSO_TOKEN:
+        return libsql.connect(TURSO_URL, auth_token=TURSO_TOKEN)
+    else:
+        # Fallback: local file (अगर Turso नहीं है)
+        return libsql.connect('database.db')
 
 # ============ DATABASE INIT ============
 def init_db():
-    async def _init():
-        async with libsql_client.create_client(
-            url=TURSO_URL,
-            auth_token=TURSO_TOKEN
-        ) as client:
-            await client.execute('''
-                CREATE TABLE IF NOT EXISTS workers (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    worker_id TEXT UNIQUE,
-                    name TEXT NOT NULL,
-                    phone TEXT,
-                    daily_wage INTEGER DEFAULT 0,
-                    photo TEXT,
-                    join_date TEXT
-                )
-            ''')
-            await client.execute('''
-                CREATE TABLE IF NOT EXISTS attendance (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    worker_id TEXT NOT NULL,
-                    date TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    UNIQUE(worker_id, date)
-                )
-            ''')
-            await client.execute('''
-                CREATE TABLE IF NOT EXISTS payments (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    worker_id TEXT NOT NULL,
-                    amount INTEGER NOT NULL,
-                    date TEXT NOT NULL,
-                    note TEXT,
-                    created_at TEXT
-                )
-            ''')
-    run_async(_init())
-
-if TURSO_URL and TURSO_TOKEN:
     try:
-        init_db()
+        conn = get_db()
+        c = conn.cursor()
+
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS workers (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                worker_id TEXT UNIQUE,
+                name TEXT NOT NULL,
+                phone TEXT,
+                daily_wage INTEGER DEFAULT 0,
+                photo TEXT,
+                join_date TEXT
+            )
+        ''')
+
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS attendance (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                worker_id TEXT NOT NULL,
+                date TEXT NOT NULL,
+                status TEXT NOT NULL,
+                UNIQUE(worker_id, date)
+            )
+        ''')
+
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS payments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                worker_id TEXT NOT NULL,
+                amount INTEGER NOT NULL,
+                date TEXT NOT NULL,
+                note TEXT,
+                created_at TEXT
+            )
+        ''')
+
+        conn.commit()
+        conn.close()
         print("✅ Turso database connected!")
     except Exception as e:
         print(f"⚠️ Database init error: {e}")
+
+if TURSO_URL and TURSO_TOKEN:
+    init_db()
 else:
     print("⚠️ TURSO_URL और TURSO_TOKEN set नहीं हैं।")
 
-# ============ HELPERS (IST TIMEZONE) ============
+# ============ HELPER FUNCTIONS ============
 def get_today():
     return datetime.now(IST).strftime('%Y-%m-%d')
 
@@ -115,6 +93,14 @@ def get_today_display():
 
 def get_current_month():
     return datetime.now(IST).strftime('%Y-%m')
+
+def to_int(value):
+    try:
+        if value is None:
+            return 0
+        return int(value)
+    except (ValueError, TypeError):
+        return 0
 
 def is_admin():
     return session.get('admin') == True
@@ -156,26 +142,43 @@ def logout():
 # ============ DASHBOARD ============
 @app.route('/')
 def home():
-    total_workers = to_int(db_execute("SELECT COUNT(*) FROM workers")[0][0])
+    conn = get_db()
+    c = conn.cursor()
+
+    c.execute("SELECT COUNT(*) FROM workers")
+    total_workers = to_int(c.fetchone()[0])
 
     today = get_today()
-    present_today = to_int(db_execute("SELECT COUNT(*) FROM attendance WHERE date = ? AND status = 'P'", [today])[0][0])
-    absent_today = to_int(db_execute("SELECT COUNT(*) FROM attendance WHERE date = ? AND status = 'A'", [today])[0][0])
-    half_today = to_int(db_execute("SELECT COUNT(*) FROM attendance WHERE date = ? AND status = 'H'", [today])[0][0])
+    c.execute("SELECT COUNT(*) FROM attendance WHERE date = ? AND status = 'P'", (today,))
+    present_today = to_int(c.fetchone()[0])
+
+    c.execute("SELECT COUNT(*) FROM attendance WHERE date = ? AND status = 'A'", (today,))
+    absent_today = to_int(c.fetchone()[0])
+
+    c.execute("SELECT COUNT(*) FROM attendance WHERE date = ? AND status = 'H'", (today,))
+    half_today = to_int(c.fetchone()[0])
 
     month = get_current_month()
-    month_payment = to_int(db_execute("SELECT COALESCE(SUM(amount), 0) FROM payments WHERE date LIKE ?", [month + '%'])[0][0])
+    c.execute("SELECT COALESCE(SUM(amount), 0) FROM payments WHERE date LIKE ?", (month + '%',))
+    month_payment = to_int(c.fetchone()[0])
 
-    workers_data = db_execute("SELECT worker_id, daily_wage FROM workers")
+    # Total due calculation
+    c.execute("SELECT worker_id, daily_wage FROM workers")
+    workers_data = c.fetchall()
 
     total_due = 0
     for w_id, wage in workers_data:
         wage = to_int(wage)
-        p_days = to_int(db_execute("SELECT COUNT(*) FROM attendance WHERE worker_id = ? AND status = 'P'", [w_id])[0][0])
-        h_days = to_int(db_execute("SELECT COUNT(*) FROM attendance WHERE worker_id = ? AND status = 'H'", [w_id])[0][0])
+        c.execute("SELECT COUNT(*) FROM attendance WHERE worker_id = ? AND status = 'P'", (w_id,))
+        p_days = to_int(c.fetchone()[0])
+        c.execute("SELECT COUNT(*) FROM attendance WHERE worker_id = ? AND status = 'H'", (w_id,))
+        h_days = to_int(c.fetchone()[0])
         earned = (p_days * wage) + (h_days * wage // 2)
-        paid = to_int(db_execute("SELECT COALESCE(SUM(amount), 0) FROM payments WHERE worker_id = ?", [w_id])[0][0])
+        c.execute("SELECT COALESCE(SUM(amount), 0) FROM payments WHERE worker_id = ?", (w_id,))
+        paid = to_int(c.fetchone()[0])
         total_due += max(0, earned - paid)
+
+    conn.close()
 
     return render_template('index.html',
                          total_workers=total_workers,
@@ -189,7 +192,11 @@ def home():
 # ============ WORKERS LIST ============
 @app.route('/workers')
 def workers():
-    all_workers = db_execute("SELECT * FROM workers ORDER BY id DESC")
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT * FROM workers ORDER BY id DESC")
+    all_workers = c.fetchall()
+    conn.close()
     return render_template('workers.html', workers=all_workers)
 
 # ============ ADD WORKER ============
@@ -208,13 +215,21 @@ def add_worker():
             photo_name = secure_filename(photo.filename)
             photo.save(os.path.join(app.config['UPLOAD_FOLDER'], photo_name))
 
-        count = to_int(db_execute("SELECT COUNT(*) FROM workers")[0][0]) + 1
-        worker_id = f"W{count:03d}"
+        conn = get_db()
+        c = conn.cursor()
 
-        db_execute(
-            "INSERT INTO workers (worker_id, name, phone, daily_wage, photo, join_date) VALUES (?, ?, ?, ?, ?, ?)",
-            [worker_id, name, phone, daily_wage, photo_name, join_date]
-        )
+        # MAX(id) use करो — COUNT नहीं (delete के बाद भी सही ID बने)
+        c.execute("SELECT COALESCE(MAX(id), 0) FROM workers")
+        max_id = to_int(c.fetchone()[0]) + 1
+        worker_id = f"W{max_id:03d}"
+
+        c.execute('''
+            INSERT INTO workers (worker_id, name, phone, daily_wage, photo, join_date)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (worker_id, name, phone, daily_wage, photo_name, join_date))
+
+        conn.commit()
+        conn.close()
 
         return redirect(url_for('workers'))
 
@@ -223,29 +238,47 @@ def add_worker():
 # ============ ID CARD ============
 @app.route('/id_card/<int:worker_id>')
 def id_card(worker_id):
-    result = db_execute("SELECT * FROM workers WHERE id = ?", [worker_id])
-    worker = result[0] if result else None
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("SELECT * FROM workers WHERE id = ?", (worker_id,))
+    worker = c.fetchone()
+    conn.close()
     return render_template('id_card.html', worker=worker)
 
 # ============ DELETE WORKER ============
 @app.route('/delete_worker/<int:worker_id>')
 @admin_required
 def delete_worker(worker_id):
-    row = db_execute("SELECT worker_id FROM workers WHERE id = ?", [worker_id])
+    conn = get_db()
+    c = conn.cursor()
+
+    c.execute("SELECT worker_id FROM workers WHERE id = ?", (worker_id,))
+    row = c.fetchone()
+
     if row:
-        w_id = row[0][0]
-        db_execute("DELETE FROM attendance WHERE worker_id = ?", [w_id])
-        db_execute("DELETE FROM payments WHERE worker_id = ?", [w_id])
-        db_execute("DELETE FROM workers WHERE id = ?", [worker_id])
+        w_id = row[0]
+        c.execute("DELETE FROM attendance WHERE worker_id = ?", (w_id,))
+        c.execute("DELETE FROM payments WHERE worker_id = ?", (w_id,))
+        c.execute("DELETE FROM workers WHERE id = ?", (worker_id,))
+
+    conn.commit()
+    conn.close()
     return redirect(url_for('workers'))
 
 # ============ ATTENDANCE ============
 @app.route('/attendance')
 def attendance():
-    all_workers = db_execute("SELECT * FROM workers ORDER BY worker_id")
+    conn = get_db()
+    c = conn.cursor()
+
+    c.execute("SELECT * FROM workers ORDER BY worker_id")
+    all_workers = c.fetchall()
+
     today = get_today()
-    today_rows = db_execute("SELECT worker_id, status FROM attendance WHERE date = ?", [today])
-    today_attendance = {row[0]: row[1] for row in today_rows}
+    c.execute("SELECT worker_id, status FROM attendance WHERE date = ?", (today,))
+    today_attendance = {row[0]: row[1] for row in c.fetchall()}
+
+    conn.close()
 
     return render_template('attendance.html',
                          workers=all_workers,
@@ -256,26 +289,45 @@ def attendance():
 @admin_required
 def save_attendance():
     today = get_today()
+    conn = get_db()
+    c = conn.cursor()
+
     for key, value in request.form.items():
         if key.startswith('status_'):
             worker_id = key.replace('status_', '')
             status = value
-            db_execute(
-                "INSERT INTO attendance (worker_id, date, status) VALUES (?, ?, ?) ON CONFLICT(worker_id, date) DO UPDATE SET status = excluded.status",
-                [worker_id, today, status]
-            )
+
+            c.execute('''
+                INSERT INTO attendance (worker_id, date, status)
+                VALUES (?, ?, ?)
+                ON CONFLICT(worker_id, date)
+                DO UPDATE SET status = excluded.status
+            ''', (worker_id, today, status))
+
+    conn.commit()
+    conn.close()
+
     return redirect(url_for('attendance'))
 
 # ============ PAYMENTS ============
 @app.route('/payments')
 def payments():
-    all_workers = db_execute("SELECT * FROM workers ORDER BY worker_id")
-    all_payments = db_execute('''
+    conn = get_db()
+    c = conn.cursor()
+
+    c.execute("SELECT * FROM workers ORDER BY worker_id")
+    all_workers = c.fetchall()
+
+    c.execute('''
         SELECT p.id, p.worker_id, w.name, p.amount, p.date, p.note
         FROM payments p
         LEFT JOIN workers w ON p.worker_id = w.worker_id
         ORDER BY p.id DESC
     ''')
+    all_payments = c.fetchall()
+
+    conn.close()
+
     return render_template('payments.html',
                          workers=all_workers,
                          payments=all_payments,
@@ -290,46 +342,72 @@ def add_payment():
     note = request.form.get('note', '')
     date = request.form.get('date', get_today())
 
-    db_execute(
-        "INSERT INTO payments (worker_id, amount, date, note, created_at) VALUES (?, ?, ?, ?, ?)",
-        [worker_id, amount, date, note, datetime.now(IST).strftime('%Y-%m-%d %H:%M:%S')]
-    )
+    conn = get_db()
+    c = conn.cursor()
+    c.execute('''
+        INSERT INTO payments (worker_id, amount, date, note, created_at)
+        VALUES (?, ?, ?, ?, ?)
+    ''', (worker_id, amount, date, note, datetime.now(IST).strftime('%Y-%m-%d %H:%M:%S')))
+    conn.commit()
+    conn.close()
+
     return redirect(url_for('payments'))
 
 @app.route('/delete_payment/<int:payment_id>')
 @admin_required
 def delete_payment(payment_id):
-    db_execute("DELETE FROM payments WHERE id = ?", [payment_id])
+    conn = get_db()
+    c = conn.cursor()
+    c.execute("DELETE FROM payments WHERE id = ?", (payment_id,))
+    conn.commit()
+    conn.close()
     return redirect(request.referrer or url_for('payments'))
 
 # ============ WORKER DETAIL ============
 @app.route('/worker_detail/<worker_id>')
 def worker_detail(worker_id):
-    result = db_execute("SELECT * FROM workers WHERE worker_id = ?", [worker_id])
-    worker = result[0] if result else None
+    conn = get_db()
+    c = conn.cursor()
+
+    c.execute("SELECT * FROM workers WHERE worker_id = ?", (worker_id,))
+    worker = c.fetchone()
 
     if not worker:
+        conn.close()
         return redirect(url_for('workers'))
 
-    present_days = to_int(db_execute("SELECT COUNT(*) FROM attendance WHERE worker_id = ? AND status = 'P'", [worker_id])[0][0])
-    half_days = to_int(db_execute("SELECT COUNT(*) FROM attendance WHERE worker_id = ? AND status = 'H'", [worker_id])[0][0])
-    absent_days = to_int(db_execute("SELECT COUNT(*) FROM attendance WHERE worker_id = ? AND status = 'A'", [worker_id])[0][0])
+    c.execute("SELECT COUNT(*) FROM attendance WHERE worker_id = ? AND status = 'P'", (worker_id,))
+    present_days = to_int(c.fetchone()[0])
+
+    c.execute("SELECT COUNT(*) FROM attendance WHERE worker_id = ? AND status = 'H'", (worker_id,))
+    half_days = to_int(c.fetchone()[0])
+
+    c.execute("SELECT COUNT(*) FROM attendance WHERE worker_id = ? AND status = 'A'", (worker_id,))
+    absent_days = to_int(c.fetchone()[0])
 
     wage = to_int(worker[4])
     earned = (present_days * wage) + (half_days * wage // 2)
 
-    all_payments = db_execute(
-        "SELECT id, amount, date, note FROM payments WHERE worker_id = ? ORDER BY id DESC",
-        [worker_id]
-    )
+    c.execute('''
+        SELECT id, amount, date, note FROM payments
+        WHERE worker_id = ?
+        ORDER BY id DESC
+    ''', (worker_id,))
+    all_payments = c.fetchall()
 
-    total_paid = to_int(db_execute("SELECT COALESCE(SUM(amount), 0) FROM payments WHERE worker_id = ?", [worker_id])[0][0])
+    c.execute("SELECT COALESCE(SUM(amount), 0) FROM payments WHERE worker_id = ?", (worker_id,))
+    total_paid = to_int(c.fetchone()[0])
+
     due = earned - total_paid
 
-    attendance_history = db_execute(
-        "SELECT date, status FROM attendance WHERE worker_id = ? ORDER BY date DESC",
-        [worker_id]
-    )
+    c.execute('''
+        SELECT date, status FROM attendance
+        WHERE worker_id = ?
+        ORDER BY date DESC
+    ''', (worker_id,))
+    attendance_history = c.fetchall()
+
+    conn.close()
 
     return render_template('worker_detail.html',
                          worker=worker,
