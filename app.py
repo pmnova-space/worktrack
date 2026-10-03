@@ -4,8 +4,8 @@ from datetime import datetime, timezone, timedelta
 from werkzeug.utils import secure_filename
 from functools import wraps
 
-# ============ LIBSQL (sqlite3 compatible) ============
-import libsql_experimental as libsql
+# ============ LIBSQL (Turso की नई official library) ============
+import libsql
 
 # ============ INDIA TIMEZONE (IST = UTC + 5:30) ============
 IST = timezone(timedelta(hours=5, minutes=30))
@@ -27,11 +27,9 @@ ADMIN_PASSWORD = 'Khoth@123'
 
 # ============ DATABASE CONNECTION ============
 def get_db():
-    """Turso से connect करो — हर request पर fresh connection"""
     if TURSO_URL and TURSO_TOKEN:
         return libsql.connect(TURSO_URL, auth_token=TURSO_TOKEN)
     else:
-        # Fallback: local file (अगर Turso नहीं है)
         return libsql.connect('database.db')
 
 # ============ DATABASE INIT ============
@@ -84,7 +82,7 @@ if TURSO_URL and TURSO_TOKEN:
 else:
     print("⚠️ TURSO_URL और TURSO_TOKEN set नहीं हैं।")
 
-# ============ HELPER FUNCTIONS ============
+# ============ HELPERS ============
 def get_today():
     return datetime.now(IST).strftime('%Y-%m-%d')
 
@@ -162,7 +160,6 @@ def home():
     c.execute("SELECT COALESCE(SUM(amount), 0) FROM payments WHERE date LIKE ?", (month + '%',))
     month_payment = to_int(c.fetchone()[0])
 
-    # Total due calculation
     c.execute("SELECT worker_id, daily_wage FROM workers")
     workers_data = c.fetchall()
 
@@ -218,7 +215,6 @@ def add_worker():
         conn = get_db()
         c = conn.cursor()
 
-        # MAX(id) use करो — COUNT नहीं (delete के बाद भी सही ID बने)
         c.execute("SELECT COALESCE(MAX(id), 0) FROM workers")
         max_id = to_int(c.fetchone()[0]) + 1
         worker_id = f"W{max_id:03d}"
